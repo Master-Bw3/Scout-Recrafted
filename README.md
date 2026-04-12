@@ -15,7 +15,8 @@ It is a **community port / continuation** made to keep the mod usable on modern 
 
 **All original credit belongs to the original Scout author(s).**
 
-Original project: (https://www.curseforge.com/minecraft/mc-mods/scout) 
+Original project:  (https://www.curseforge.com/minecraft/mc-mods/scout) 
+
 Original author: (https://www.curseforge.com/members/cynosphere/projects)
 
 ## Features
