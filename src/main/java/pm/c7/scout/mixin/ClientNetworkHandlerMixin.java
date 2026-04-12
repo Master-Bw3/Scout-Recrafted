@@ -6,8 +6,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.network.packet.s2c.play.ScreenHandlerSlotUpdateS2CPacket;
+import net.minecraft.screen.ScreenHandler;
 
 @Mixin(ClientPlayNetworkHandler.class)
 public class ClientNetworkHandlerMixin {
@@ -17,18 +19,34 @@ public class ClientNetworkHandlerMixin {
         at = @At("HEAD"),
         cancellable = true
     )
-    private void scout$ignoreOutOfBoundsSlot(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
+    private void scout$ignoreOnlyCreativeOutOfBoundsForCurrentHandler(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.player == null) return;
 
-        net.minecraft.screen.ScreenHandler handler = client.player.currentScreenHandler;
+        // Este parche solo aplica si el jugador está viendo el inventario creativo.
+        if (!(client.currentScreen instanceof CreativeInventoryScreen)) {
+            return;
+        }
+
+        ScreenHandler handler = client.player.currentScreenHandler;
         if (handler == null) return;
 
         int slot = packet.getSlot();
-        if (slot == -1) return; // cursor slot, always valid
 
+        // Cursor slot: válido.
+        if (slot == -1) return;
+
+        // Muy importante:
+        // solo ignorar el paquete si corresponde al handler actual visible.
+        // Si no, no tocar nada.
+        if (packet.getSyncId() != handler.syncId) {
+            return;
+        }
+
+        // En creativo, al equipar/desequipar trinkets pueden llegar updates
+        // fuera del rango del handler visible. Ignorarlos evita el protocol error.
         if (slot < 0 || slot >= handler.slots.size()) {
-            ci.cancel(); // out of bounds (e.g. creative mode), silently ignore
+            ci.cancel();
         }
     }
 }

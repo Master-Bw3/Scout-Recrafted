@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.PlayerScreenHandler;
 import net.minecraft.screen.ScreenHandler;
@@ -71,14 +72,19 @@ public abstract class PlayerScreenHandlerMixin extends ScreenHandler implements 
 
     @Inject(method = "quickMove", at = @At("HEAD"), cancellable = true)
     private void scout$quickMoveToBag(PlayerEntity player, int index, CallbackInfoReturnable<ItemStack> cir) {
+        if (player.getAbilities().creativeMode) return;
         if (index < 0 || index >= this.slots.size()) return;
 
         Slot clickedSlot = this.slots.get(index);
         if (clickedSlot instanceof BagSlot) return;
         if (!clickedSlot.hasStack()) return;
 
-        // No meter bags dentro de bags, pero tampoco secuestrar el quickMove vanilla.
-        if (clickedSlot.getStack().getItem() instanceof BaseBagItem) return;
+        ItemStack clickedStack = clickedSlot.getStack();
+
+        if (clickedStack.getItem() instanceof BaseBagItem) return;
+        if (clickedStack.getItem() instanceof ArmorItem) return;
+
+        if (clickedSlot.inventory != player.getInventory()) return;
 
         boolean inserted = scout$tryInsert(satchelSlots, clickedSlot)
                 || scout$tryInsert(leftPouchSlots, clickedSlot)
@@ -108,13 +114,13 @@ public abstract class PlayerScreenHandlerMixin extends ScreenHandler implements 
             if (existing.isEmpty()) continue;
             if (!ItemStack.areItemsAndComponentsEqual(existing, srcStack)) continue;
 
-            int space = Math.min(bag.getMaxItemCount(), srcStack.getMaxCount()) - existing.getCount();
+            int max = Math.min(bag.getMaxItemCount(existing), srcStack.getMaxCount());
+            int space = max - existing.getCount();
             if (space <= 0) continue;
 
             int move = Math.min(space, srcStack.getCount());
             existing.increment(move);
-            bag.setStack(existing);
-            bag.markDirty();
+            bag.setStack(existing.copy());
             srcStack.decrement(move);
 
             if (srcStack.isEmpty()) return true;
@@ -125,9 +131,8 @@ public abstract class PlayerScreenHandlerMixin extends ScreenHandler implements 
             if (!bag.getStack().isEmpty()) continue;
             if (!bag.canInsert(srcStack)) continue;
 
-            int move = Math.min(Math.min(bag.getMaxItemCount(), srcStack.getMaxCount()), srcStack.getCount());
+            int move = Math.min(Math.min(bag.getMaxItemCount(srcStack), srcStack.getMaxCount()), srcStack.getCount());
             bag.setStack(srcStack.copyWithCount(move));
-            bag.markDirty();
             srcStack.decrement(move);
 
             if (srcStack.isEmpty()) return true;
