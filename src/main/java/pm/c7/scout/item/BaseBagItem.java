@@ -5,7 +5,6 @@ import java.util.Optional;
 
 import dev.emi.trinkets.api.SlotReference;
 import dev.emi.trinkets.api.TrinketItem;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.NbtComponent;
 import net.minecraft.entity.LivingEntity;
@@ -31,6 +30,7 @@ import pm.c7.scout.Scout;
 import pm.c7.scout.ScoutPlayerScreenHandler;
 import pm.c7.scout.ScoutUtil;
 import pm.c7.scout.ScoutUtil.EquippedBagRef;
+import pm.c7.scout.client.BaseBagItemClient;
 import pm.c7.scout.screen.BagSlot;
 
 public class BaseBagItem extends TrinketItem {
@@ -85,15 +85,15 @@ public class BaseBagItem extends TrinketItem {
         return TypedActionResult.pass(stack);
     }
 
-    public Inventory getInventory(ItemStack stack, RegistryWrapper.WrapperLookup registries) {
-        return createInventory(stack, null, registries);
+    public Inventory getInventory(ItemStack stack) {
+        return createInventory(stack, null);
     }
 
-    public Inventory getInventory(EquippedBagRef ref, RegistryWrapper.WrapperLookup registries) {
-        return createInventory(ref.stack(), ref, registries);
+    public Inventory getInventory(EquippedBagRef ref) {
+        return createInventory(ref.stack(), ref);
     }
 
-    private Inventory createInventory(ItemStack stack, EquippedBagRef ref, RegistryWrapper.WrapperLookup registries) {
+    private Inventory createInventory(ItemStack stack, EquippedBagRef ref) {
         SimpleInventory inventory = new SimpleInventory(this.slots) {
             @Override
             public void markDirty() {
@@ -112,7 +112,7 @@ public class BaseBagItem extends TrinketItem {
                     }
                 }
 
-                scout$writeInventoryToStack(targetStack, this, registries);
+                scout$writeInventoryToStack(targetStack, this);
 
                 if (ref != null && ref.inventory() != null) {
                     try {
@@ -130,7 +130,7 @@ public class BaseBagItem extends TrinketItem {
 
         if (compound.contains(ITEMS_KEY, NbtElement.LIST_TYPE)) {
             NbtList items = compound.getList(ITEMS_KEY, NbtElement.COMPOUND_TYPE);
-            ScoutUtil.inventoryFromTag(items, inventory, registries);
+            ScoutUtil.inventoryFromTag(items, inventory);
         }
 
         return inventory;
@@ -138,14 +138,8 @@ public class BaseBagItem extends TrinketItem {
 
     @Override
     public Optional<TooltipData> getTooltipData(ItemStack stack) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || client.player == null) {
-            return Optional.empty();
-        }
-
-        RegistryWrapper.WrapperLookup registries = client.player.getRegistryManager();
         DefaultedList<ItemStack> stacks = DefaultedList.of();
-        Inventory inventory = getInventory(stack, registries);
+        Inventory inventory = getInventory(stack);
 
         for (int i = 0; i < this.slots; i++) {
             stacks.add(inventory.getStack(i));
@@ -180,20 +174,13 @@ public class BaseBagItem extends TrinketItem {
 
     private static void scout$queueRefresh(PlayerEntity player) {
         if (player.getWorld().isClient()) {
-            MinecraftClient client = MinecraftClient.getInstance();
-            if (client != null) {
-                client.execute(() -> {
-                    if (client.player != null) {
-                        refreshAllSlots(client.player, client.player.getRegistryManager());
-                    }
-                });
-            }
+            BaseBagItemClient.scout$queueRefresh(player);
         } else if (player.getServer() != null) {
             player.getServer().execute(() -> refreshAllSlots(player, player.getRegistryManager()));
         }
     }
 
-    private static void scout$writeInventoryToStack(ItemStack stack, Inventory inventory, RegistryWrapper.WrapperLookup registries) {
+    private static void scout$writeInventoryToStack(ItemStack stack, Inventory inventory) {
         if (stack == null || stack.isEmpty() || inventory == null) return;
 
         SimpleInventory copy = new SimpleInventory(inventory.size());
@@ -203,7 +190,7 @@ public class BaseBagItem extends TrinketItem {
 
         NbtComponent existing = stack.getOrDefault(DataComponentTypes.CUSTOM_DATA, NbtComponent.DEFAULT);
         NbtCompound compound = existing.copyNbt();
-        compound.put(ITEMS_KEY, ScoutUtil.inventoryToTag(copy, registries));
+        compound.put(ITEMS_KEY, ScoutUtil.inventoryToTag(copy));
         stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(compound));
     }
 
@@ -261,7 +248,7 @@ public class BaseBagItem extends TrinketItem {
             return;
         }
 
-        Inventory inv = item.getInventory(ref, registries);
+        Inventory inv = item.getInventory(ref);
         int max = Math.min(slots.size(), item.getSlotCount());
 
         for (int i = 0; i < max; i++) {
